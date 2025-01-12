@@ -183,9 +183,8 @@ class VideoDriverImplementation(VideoDriver):
     def draw_pixels(self):
         for y in range(constants.GAMEBOY_SCREEN_HEIGHT):
             for x in range(constants.GAMEBOY_SCREEN_WIDTH):
-                if self.changed[y][x]:
-                    self.draw_pixel(x, y, self.pixels[y][x])
-                    self.changed[y][x] = False
+                if self.was_dirty(x, y):
+                    self.draw_pixel(x, y, self.get_pixel(x, y))
 
     def draw_ascii_pixels(self):
         str = []
@@ -193,7 +192,7 @@ class VideoDriverImplementation(VideoDriver):
             str.append("\n")
             for x in range(self.width):
                 if y % 2 == 0 or True:
-                    str.append(["#", "%", "+", "."][self.pixels[y][x]])
+                    str.append(["#", "%", "+", "."][self.get_pixel(x, y)])
         print ''.join(str)
 
 

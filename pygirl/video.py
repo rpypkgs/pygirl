@@ -473,7 +473,11 @@ class Video(iMemory):
         self.draw_window(self.background, self.line_y, self.line)
         self.draw_window(self.window, self.line_y, self.line)
         self.draw_sprites(self.line_y, self.line)
-        self.send_pixels_line_to_driver()
+
+        # Send a line of pixels to the driver.
+        for x in range(GAMEBOY_SCREEN_WIDTH):
+            color = self.palette[self.line[SPRITE_SIZE + x]]
+            self.driver.draw_gb_pixel(x, self.line_y, color)
 
     def draw_sprites(self, line_y, line):
         if not self.control.sprites_enabled: return
@@ -507,11 +511,6 @@ class Video(iMemory):
             self.shown_sprites[index], self.shown_sprites[highest] = \
                 self.shown_sprites[highest], self.shown_sprites[index]
 
-    def send_pixels_line_to_driver(self):
-        for x in range(0, GAMEBOY_SCREEN_WIDTH):
-            color = self.palette[self.line[SPRITE_SIZE + x]]
-            self.driver.draw_gb_pixel(x, self.line_y, color)
-
     def update_palette(self):
         if not self.dirty: return
         # bit 4/0 = BG color, 
@@ -540,31 +539,36 @@ class Video(iMemory):
 # ------------------------------------------------------------------------------
 
 class VideoDriver(object):
+    width = GAMEBOY_SCREEN_WIDTH
+    height = GAMEBOY_SCREEN_HEIGHT
+
     def __init__(self):
-        self.width = GAMEBOY_SCREEN_WIDTH
-        self.height = GAMEBOY_SCREEN_HEIGHT
-        self.create_pixels()
+        size = self.width * self.height
+        # any non-valid color is fine
+        self.pixels = bytearray("\xff" * size)
+        self.changed = bytearray("\x00" * size)
+
+    def get_pixel(self, x, y): return self.pixels[x + self.width * y]
+    def set_pixel(self, x, y, p): self.pixels[x + self.width * y] = p
+    def dirty_pixel(self, x, y): self.changed[x + self.width * y] += 1
+    def was_dirty(self, x, y):
+        i = x + self.width * y
+        self.changed[i], rv = 0, self.changed[i]
+        return rv
+
+    def draw_gb_pixel(self, x, y, color):
+        if color != self.get_pixel(x, y):
+            self.set_pixel(x, y, color)
+            self.dirty_pixel(x, y)
 
     def clear_gb_pixels(self):
+        # XXX deliberately wasteful in order to accomodate metadata display?
         for y in range(GAMEBOY_SCREEN_HEIGHT):
             for x in range(GAMEBOY_SCREEN_WIDTH):
                 self.draw_gb_pixel(x, y, 0)
 
-    def draw_gb_pixel(self, x, y, color):
-        old = self.pixels[y][x]
-        self.pixels[y][x] = color
-        self.changed[y][x] = old != color
-
-    def update_gb_display(self):
-        self.update_display()
+    def update_gb_display(self): self.update_display()
 
     def update_display(self):
         # Overwrite this method to actually put the pixels on a screen.
         pass
-
-    def create_pixels(self):
-        # any non-valid color is fine
-        self.pixels = [[255] * self.width
-                       for i in range(self.height)]
-        self.changed = [[True] * self.width
-                        for i in range(self.height)]
