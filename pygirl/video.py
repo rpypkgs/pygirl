@@ -475,9 +475,9 @@ class Video(iMemory):
         self.draw_sprites(self.line_y, self.line)
 
         # Send a line of pixels to the driver.
-        for x in range(GAMEBOY_SCREEN_WIDTH):
-            color = self.palette[self.line[SPRITE_SIZE + x]]
-            self.driver.draw_gb_pixel(x, self.line_y, color)
+        colors = "".join([chr(self.palette[self.line[SPRITE_SIZE + x]])
+                          for x in range(GAMEBOY_SCREEN_WIDTH)])
+        self.driver.draw_gb_pixel_line(self.line_y, colors)
 
     def draw_sprites(self, line_y, line):
         if not self.control.sprites_enabled: return
@@ -550,22 +550,21 @@ class VideoDriver(object):
 
     def get_pixel(self, x, y): return self.pixels[x + self.width * y]
     def set_pixel(self, x, y, p): self.pixels[x + self.width * y] = p
-    def dirty_pixel(self, x, y): self.changed[x + self.width * y] += 1
     def was_dirty(self, x, y):
         i = x + self.width * y
         self.changed[i], rv = 0, self.changed[i]
         return rv
 
-    def draw_gb_pixel(self, x, y, color):
-        if color != self.get_pixel(x, y):
-            self.set_pixel(x, y, color)
-            self.dirty_pixel(x, y)
+    def draw_gb_pixel_line(self, y, colors):
+        start = self.width * y
+        for i in range(len(colors)):
+            self.pixels[start + i] = ord(colors[i])
+            self.changed[start + i] = 1
 
     def clear_gb_pixels(self):
         # XXX deliberately wasteful in order to accomodate metadata display?
         for y in range(GAMEBOY_SCREEN_HEIGHT):
-            for x in range(GAMEBOY_SCREEN_WIDTH):
-                self.draw_gb_pixel(x, y, 0)
+            self.draw_gb_pixel_line(y, "\x00" * GAMEBOY_SCREEN_WIDTH)
 
     def update_gb_display(self): self.update_display()
 
