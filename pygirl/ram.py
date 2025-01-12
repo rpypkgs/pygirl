@@ -8,15 +8,23 @@ from pygirl import constants
 
 
 class InvalidMemoryAccess(Exception):
-    pass
+    "A read or write was invalid."
+    def __init__(self, message): self.message = message
 
 
 class iMemory(object):
+    "A simple memory interface with reading and writing."
     def write(self, address, data):
-        pass
+        raise InvalidMemoryAccess("Abstract write always fails")
 
     def read(self, address):
-        return 0xFF
+        raise InvalidMemoryAccess("Abstract read always fails")
+
+
+class MissingMemory(iMemory):
+    def write(self, address, data): pass
+    def read(self, address): return 0xff
+missingMemory = MissingMemory()
 
 
 class RAM(iMemory):

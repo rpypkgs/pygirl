@@ -1,6 +1,6 @@
 """
 PyGirl Emulator
- 
+
 GameBoy Scheduler and Memory Mapper
 
 """
@@ -9,7 +9,7 @@ from pygirl.cpu import CPU
 from pygirl.interrupt import Interrupt
 from pygirl.cartridge import CartridgeManager
 from pygirl.joypad import Joypad, JoypadDriver
-from pygirl.ram import RAM
+from pygirl.ram import missingMemory, RAM
 from pygirl.serial import Serial
 from pygirl.sound import Sound, SoundDriver, BogusSound
 from pygirl.timer import Timer, Clock
@@ -122,20 +122,11 @@ class GameBoy(object):
         #    pass
 
     def write(self, address, data):
-        receiver = self.get_receiver(address)
-        if receiver:
-            receiver.write(address, data)
-        # else:
-        #     raise Exception(("invalid write address given: ",address," ",data))
-        if address == constants.STAT or address == 0xFFFF:
+        self.get_receiver(address).write(address, data)
+        if address in (constants.STAT, 0xFFFF):
             self.cpu.handle_pending_interrupts()
 
-    def read(self, address):
-        receiver = self.get_receiver(address)
-        if not receiver:
-            # raise Exception("invalid read address given: ", address)
-            return 0xFF
-        return receiver.read(address)
+    def read(self, address): return self.get_receiver(address).read(address)
 
     def print_receiver_msg(self, address, name):
         # print "    recei: ", hex(address), name
@@ -196,6 +187,7 @@ class GameBoy(object):
         elif address == 0xFFFF:
             self.print_receiver_msg(address, "interrupt")
             return self.interrupt
+        return missingMemory
 
     def draw_logo(self):
         for index in range(0, 48):

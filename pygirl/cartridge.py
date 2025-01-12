@@ -3,7 +3,7 @@
 
 from pygirl import constants
 from pygirl.timer import *
-from pygirl.ram import iMemory
+from pygirl.ram import iMemory, InvalidMemoryAccess
 
 from rpython.rlib.streamio import open_file_as_stream
 
@@ -45,10 +45,6 @@ def map_to_string(int_array):
 # EXCEPIONS --------------------------------------------------------------------
 
 class InvalidMemoryBankTypeError(Exception):
-    pass
-
-
-class InvalidMemoryAccessException(Exception):
     pass
 
 
@@ -334,11 +330,11 @@ class MBC(iMemory):
                 # return 0xFF
                 raise Exception("RAM is not Enabled")
         # return 0xFF
-        raise InvalidMemoryAccessException("MBC: Invalid address, out of range: %s"
+        raise InvalidMemoryAccess("MBC: Invalid address, out of range: %s"
                                            % hex(address))
 
     def write(self, address, data):
-        raise InvalidMemoryAccessException("MBC: Invalid write access")
+        raise InvalidMemoryAccess("MBC: Invalid write access")
 
     def write_ram_enable(self, address, data):
         if self.ram_size > 0:
@@ -403,7 +399,7 @@ class MBC1(MBC):
             self.ram[self.ram_bank + (address & 0x1FFF)] = data
         else:
             return
-            # raise InvalidMemoryAccessException("MBC 1Invalid memory Access address: %s"
+            # raise InvalidMemoryAccess("MBC 1Invalid memory Access address: %s"
             #                                   % hex(address))
 
     def write_rom_bank_1(self, address, data):
@@ -446,7 +442,7 @@ class MBC2(MBC):
 
     def read(self, address):
         if address > 0xA1FF:
-            raise InvalidMemoryAccessException("MBC2 out of Bounds: %s"
+            raise InvalidMemoryAccess("MBC2 out of Bounds: %s"
                                                % hex(address))
         elif address >= 0xA000:
             return self.ram[address & 0x01FF]
@@ -543,7 +539,7 @@ class MBC3(MBC):
             return self.clock_latched_days
         if self.clock_register == 0x0C:
             return self.clock_latched_control
-        raise InvalidMemoryAccessException("MBC3.read_clock_data invalid address %i")
+        raise InvalidMemoryAccess("MBC3.read_clock_data invalid address %i")
 
     def write(self, address, data):
         # print hex(address), hex(data)
@@ -741,7 +737,7 @@ class HuC3(MBC):
         elif self.ram_flag == 0x0A or self.ram_flag == 0x00 and \
                         self.ram_size > 0:
             return self.ram[self.ram_bank + (address & 0x1FFF)]
-        raise InvalidMemoryAccessException("Huc3 read error")
+        raise InvalidMemoryAccess("Huc3 read error")
 
     def write(self, address, data):
         # 0000-1FFF

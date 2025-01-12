@@ -758,6 +758,10 @@ class BogusSound(iMemory):
     def emulate(self, ticks):
         pass
 
+    def write(self, address, data): pass
+
+    def read(self, address): return 0xff
+
 
 # SOUND DRIVER -----------------------------------------------------------------
 
