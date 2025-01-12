@@ -46,7 +46,9 @@
       in {
         packages.default = interp;
         devShells.default = pkgs.mkShell {
-          packages = with pkgs; [ unzip ];
+          packages = with pkgs; [
+            unzip
+          ];
         };
       }
     );

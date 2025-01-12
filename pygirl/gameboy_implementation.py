@@ -16,25 +16,18 @@ import time
 # WARNING! Window will be very, very big!
 show_metadata = False
 
-if constants.USE_RSDL:
-    from rsdl import RSDL, RSDL_helper  # , RMix
-    from rpython.rtyper.lltypesystem import lltype, rffi
+from rpython.rlib.rarithmetic import intmask, r_int, r_uint
+from rpython.rtyper.lltypesystem import lltype, rffi
 
-    get_ticks = RSDL.GetTicks
+from rsdl import RSDL, RSDL_helper
 
 
-    def delay(secs):
-        return RSDL.Delay(int(secs * 1000))
-else:
-    delay = time.sleep
+def delay(secs): return RSDL.Delay(int(secs * 1000))
 
 
 # About 64 to make sure we have a clean distrubution of about
 # 64 frames per second
 FPS = 64
-
-
-from rpython.rlib.objectmodel import specialize
 
 
 # GAMEBOY ----------------------------------------------------------------------
@@ -47,8 +40,7 @@ class GameBoyImplementation(GameBoy):
         self.sync_time = int(time.time())
 
     def open_window(self):
-        if constants.USE_RSDL:
-            self.init_sdl()
+        self.init_sdl()
         self.video_driver.create_screen()
 
     def init_sdl(self):
@@ -60,6 +52,15 @@ class GameBoyImplementation(GameBoy):
         self.joypad_driver = JoypadDriverImplementation()
         self.video_driver = VideoDriverImplementation(self)
         self.sound_driver = SoundDriverImplementation()
+        with lltype.scoped_alloc(RSDL.AudioSpec, zero=True) as desired:
+            with lltype.scoped_alloc(RSDL.AudioSpec, zero=True) as audioSpec:
+                rffi.setintfield(desired, "c_freq", 44100)
+                rffi.setintfield(desired, "c_format", RSDL.AUDIO_U8)
+                rffi.setintfield(desired, "c_channels", 2)
+                rffi.setintfield(desired, "c_samples", 512)
+                # desired.c_callback = self.sound_driver.write
+                RSDL.OpenAudio(desired, audioSpec)
+                self.sound_driver.create_sound_driver(audioSpec)
 
     def mainLoop(self):
         self.reset()
@@ -89,27 +90,21 @@ class GameBoyImplementation(GameBoy):
         self.sync_time = time.time()
 
     def handle_execution_error(self, error):
-        if constants.USE_RSDL:
-            lltype.free(self.event, flavor='raw')
-            RSDL.Quit()
+        lltype.free(self.event, flavor='raw')
+        lltype.free(self.audioSpec, flavor='raw')
+        RSDL.Quit()
 
     def handle_events(self):
-        if constants.USE_RSDL:
-            self.poll_event()
-            if self.check_for_escape():
-                self.is_running = False
-            self.joypad_driver.update(self.event)
+        self.poll_event()
+        if self.check_for_escape():
+            self.is_running = False
+        self.joypad_driver.update(self.event)
 
     def poll_event(self):
-        if constants.USE_RSDL:
-            ok = rffi.cast(lltype.Signed, RSDL.PollEvent(self.event))
-            return ok > 0
-        else:
-            return True
+        ok = rffi.cast(lltype.Signed, RSDL.PollEvent(self.event))
+        return ok > 0
 
     def check_for_escape(self):
-        if not constants.USE_RSDL:
-            return False
         c_type = rffi.getintfield(self.event, 'c_type')
         if c_type == RSDL.KEYDOWN:
             p = rffi.cast(RSDL.KeyboardEventPtr, self.event)
@@ -133,14 +128,13 @@ class VideoDriverImplementation(VideoDriver):
             self.create_meta_windows(gameboy)
 
     def create_screen(self):
-        if constants.USE_RSDL:
-            self.screen = RSDL.SetVideoMode(self.width * self.scale, self.height * self.scale, 32, 0)
-            fmt = self.screen.c_format
-            self.colors = []
-            for color in self.COLOR_MAP:
-                color = RSDL.MapRGB(fmt, *color)
-                self.colors.append(color)
-            self.blit_rect = RSDL_helper.mallocrect(0, 0, self.scale, self.scale)
+        self.screen = RSDL.SetVideoMode(self.width * self.scale, self.height * self.scale, 32, 0)
+        fmt = self.screen.c_format
+        self.colors = []
+        for color in self.COLOR_MAP:
+            color = RSDL.MapRGB(fmt, *color)
+            self.colors.append(color)
+        self.blit_rect = RSDL_helper.mallocrect(0, 0, self.scale, self.scale)
 
     def create_meta_windows(self, gameboy):
         upper_meta_windows = [SpritesWindow(gameboy),
@@ -167,17 +161,15 @@ class VideoDriverImplementation(VideoDriver):
             self.height = max(self.height, second_y + window.height)
 
     def update_display(self):
-        if constants.USE_RSDL:
-            RSDL.LockSurface(self.screen)
-            if show_metadata:
-                for meta_window in self.meta_windows:
-                    meta_window.draw()
-            self.draw_pixels()
-            RSDL.UnlockSurface(self.screen)
-            RSDL.Flip(self.screen)
-        else:
-            print '\x1b[H\x1b[2J'  # Clear screen
-            self.draw_ascii_pixels()
+        RSDL.LockSurface(self.screen)
+        if show_metadata:
+            for meta_window in self.meta_windows:
+                meta_window.draw()
+        self.draw_pixels()
+        RSDL.UnlockSurface(self.screen)
+        RSDL.Flip(self.screen)
+        # print '\x1b[H\x1b[2J'  # Clear screen
+        # self.draw_ascii_pixels()
 
     def draw_pixel(self, x, y, color):
         color = self.colors[color]
@@ -213,8 +205,6 @@ class JoypadDriverImplementation(JoypadDriver):
         self.last_key = 0
 
     def update(self, event):
-        if not constants.USE_RSDL:
-            return
         # fetch the event from sdl
         type = rffi.getintfield(event, 'c_type')
         if type == RSDL.KEYDOWN:
@@ -225,9 +215,8 @@ class JoypadDriverImplementation(JoypadDriver):
             self.on_key_up()
 
     def create_called_key(self, event):
-        if constants.USE_RSDL:
-            p = rffi.cast(RSDL.KeyboardEventPtr, event)
-            self.last_key = rffi.getintfield(p.c_keysym, 'c_sym')
+        p = rffi.cast(RSDL.KeyboardEventPtr, event)
+        self.last_key = rffi.getintfield(p.c_keysym, 'c_sym')
 
     def on_key_down(self):
         self.toggleButton(self.get_button_handler(self.last_key), True)
@@ -240,8 +229,6 @@ class JoypadDriverImplementation(JoypadDriver):
             pressButtonFunction(self, enabled)
 
     def get_button_handler(self, key):
-        if not constants.USE_RSDL:
-            return
         if key == RSDL.K_UP:
             return JoypadDriver.button_up
         elif key == RSDL.K_RIGHT:
@@ -267,30 +254,19 @@ class SoundDriverImplementation(SoundDriver):
     The current implementation doesnt handle sound yet
     """
 
-    def __init__(self):
-        SoundDriver.__init__(self)
-        self.enabled = False
-        self.sampleRate = 44100
-        self.buffersize = 512
-        self.channelCount = 2
+    enabled = False
+
+    def create_sound_driver(self, audioSpec):
+        self.sampleRate = intmask(audioSpec.c_freq)
+        self.channelCount = intmask(audioSpec.c_channels)
+        self.buffersize = intmask(audioSpec.c_samples)
+
         self.bitsPerSample = 4
         self.sampleSize = self.bitsPerSample * self.channelCount
-        self.create_sound_driver()
 
-    def create_sound_driver(self):
-        # if RMix.OpenAudio(self.sampleRate, RSDL.AUDIO_U8,
-        #                  self.channelCount, self.chunksize) != 0:
-        #    error = rffi.charp2str(RSDL.GetError())
-        #    raise Exception(error)
-        # else:
-        #    self.enabled = True
-        pass
+    def start(self): RSDL.PauseAudio(0)
 
-    def start(self):
-        pass
-
-    def stop(self):
-        pass
+    def stop(self): RSDL.PauseAudio(1)
 
     def write(self, buffer, length):
         if not self.enabled: return

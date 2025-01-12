@@ -2,8 +2,6 @@
 # GAMEBOY
 # ___________________________________________________________________________
 
-USE_RSDL = True
-
 # Gameboy Clock Speed (1048576 Hz)
 GAMEBOY_CLOCK = 1 << 20
 
