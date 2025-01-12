@@ -25,7 +25,7 @@ DEBUG_INSTRUCTION_COUNTER = 1
 class CPU(object):
     """
     PyGIRL GameBoy (TM) Emulator
-    
+
     Central Unit Processor_a (Sharp LR35902 CPU)
     """
 
@@ -37,7 +37,7 @@ class CPU(object):
         self.halted = False
         self.cycles = 0
         self.ini_registers()
-        self.rom = [0]
+        self.rom = bytearray("\x00")
         self.reset()
 
     def ini_registers(self):

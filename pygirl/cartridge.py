@@ -1,17 +1,9 @@
-# constants.CATRIGE constants.TYPES
-# ___________________________________________________________________________
+import math
+import os
 
 from pygirl import constants
 from pygirl.timer import *
 from pygirl.ram import iMemory, InvalidMemoryAccess
-
-from rpython.rlib.streamio import open_file_as_stream
-
-import math
-
-# from rpython.rlib.rstr import str_replace
-
-import os
 
 
 # HELPERS ----------------------------------------------------------------------
@@ -32,10 +24,6 @@ def create_bank_controller(self, cartridge_type, rom, ram, clock):
         return constants.CATRIDGE_TYPE_MAPPING[cartridge_type](rom, ram, clock)
     else:
         raise InvalidMemoryBankTypeError("Unsupported memory bank controller (0x" + hex(cartridge_type) + ")")
-
-
-def map_to_byte(string):
-    return [ord(i) for i in string]
 
 
 def map_to_string(int_array):
@@ -74,12 +62,13 @@ class CartridgeManager(object):
         self.clock = clock
         self.cartridge = None
         self.mbc = None
-        self.rom = [0]
-        self.ram = [0]
+        self.rom = bytearray("\x00")
+        self.ram = bytearray("\x00")
+
+    def reset_ram(self): self.ram = bytearray("\xff" * range(len(self.ram)))
 
     def reset(self):
-        if not self.has_battery():
-            self.ram = [0xFF] * len(self.ram)
+        if not self.has_battery(): self.reset_ram()
         self.mbc.reset()
 
     def read(self, address):
@@ -111,7 +100,7 @@ class CartridgeManager(object):
         if self.get_memory_bank_type() >= constants.TYPE_MBC2 \
                 and self.get_memory_bank_type() <= constants.TYPE_MBC2_BATTERY:
             ram_size = 512
-        self.ram = [0xFF] * ram_size
+        self.ram = bytearray("\xff" * ram_size)
 
     def load_battery(self):
         if self.cartridge.has_battery():
@@ -168,7 +157,7 @@ class CartridgeManager(object):
 
     def verify_header(self):
         """
-        The memory at 0100-014F contains the cartridge header. 
+        The memory at 0100-014F contains the cartridge header.
         """
         if len(self.rom) < 0x0150:
             return False
@@ -203,19 +192,17 @@ class CartridgeFile(object):
     def reset(self):
         self.cartridge_name = ""
         self.cartridge_file_path = ""
-        self.cartridge_stream = None
-        self.cartridge_file_contents = None
+        self.cartridge_file_contents = bytearray("")
         self.battery_name = ""
         self.battery_file_path = ""
-        self.battery_stream = None
-        self.battery_file_contents = None
+        self.battery_file_contents = bytearray("")
 
     def load(self, cartridge_path):
         cartridge_path = str(cartridge_path)
         self.cartridge_file_path = cartridge_path
-        self.cartridge_stream = open_file_as_stream(cartridge_path)
-        self.cartridge_file_contents = map_to_byte(
-            self.cartridge_stream.readall())
+        with open(cartridge_path, "rb") as handle:
+            # cart = handle.read()
+            self.cartridge_file_contents = bytearray(handle.read())
         self.load_battery(cartridge_path)
 
     def load_battery(self, cartridge_file_path):
@@ -224,8 +211,8 @@ class CartridgeFile(object):
             self.read_battery()
 
     def read_battery(self):
-        self.battery_stream = open_file_as_stream(self.battery_file_path)
-        self.battery_file_contents = map_to_byte(self.battery_stream.readall())
+        with open(self.battery_file_path, "rb") as handle:
+            self.battery_file_contents = bytearray(handle.read())
 
     def create_battery_file_path(self, cartridge_file_path):
         if cartridge_file_path.endswith(constants.CARTRIDGE_FILE_EXTENSION):
@@ -250,9 +237,7 @@ class CartridgeFile(object):
         return self.battery_file_contents
 
     def write_battery(self, ram):
-        output_stream = open_file_as_stream(self.battery_file_path, "w")
-        output_stream.write(map_to_string(ram))
-        output_stream.flush()
+        with open(self.battery_file_path, "wb") as handle: handle.write(ram)
         self.battery_file_contents = ram
 
     def remove_battery(self):
@@ -285,8 +270,8 @@ class MBC(iMemory):
         self.max_ram_bank_size = max_ram_bank_size
         self.rom_bank_size = rom_bank_size
         self.rom_bank = self.rom_bank_size
-        self.rom = []
-        self.ram = []
+        self.rom = bytearray("")
+        self.ram = bytearray("")
         self.reset()
         self.set_rom(rom)
         self.set_ram(ram)
@@ -324,12 +309,9 @@ class MBC(iMemory):
             return self.rom[self.rom_bank + (address & 0x3FFF)]
         # A000-BFFF
         elif 0xA000 <= address <= 0xBFFF:
-            if self.ram_enable:
-                return self.ram[self.ram_bank + (address & 0x1FFF)]
-            else:
-                # return 0xFF
-                raise Exception("RAM is not Enabled")
-        # return 0xFF
+            if not self.ram_enable:
+                raise InvalidMemoryAccess("RAM is not enabled")
+            return self.ram[self.ram_bank + (address & 0x1FFF)]
         raise InvalidMemoryAccess("MBC: Invalid address, out of range: %s"
                                            % hex(address))
 
@@ -362,9 +344,9 @@ class DefaultMBC(MBC):
 class MBC1(MBC):
     """
     PyGirl Emulator
-    
+
     Memory Bank Controller 1 (2MB ROM, 32KB RAM)
-     
+
     0000-3FFF    ROM Bank 0 (16KB)
     4000-7FFF    ROM Bank 1-127 (16KB)
     A000-BFFF    RAM Bank 0-3 (8KB)
@@ -403,8 +385,6 @@ class MBC1(MBC):
             #                                   % hex(address))
 
     def write_rom_bank_1(self, address, data):
-        # import pdb
-        # pdb.set_trace()
         if (data & 0x1F) == 0:
             data = 1
         if self.memory_model == 0:
@@ -426,9 +406,9 @@ class MBC1(MBC):
 
 class MBC2(MBC):
     """
-    PyGirl GameBoPyGirl 
+    PyGirl GameBoPyGirl
     Memory Bank Controller 2 (256KB ROM, 512x4bit RAM)
-    
+
     0000-3FFF    ROM Bank 0 (16KB)
     4000-7FFF    ROM Bank 1-15 (16KB)
     A000-A1FF    RAM Bank (512x4bit)
@@ -448,10 +428,9 @@ class MBC2(MBC):
             return self.ram[address & 0x01FF]
         # A000-BFFF
         elif 0xA000 <= address <= 0xA1FF:
-            if self.ram_enable:
-                return self.ram[self.ram_bank + (address & 0x1FFF)]
-            else:
-                raise Exception("RAM is not Enabled")
+            if not self.ram_enable:
+                raise InvalidMemoryAccess("RAM is not enabled")
+            return self.ram[self.ram_bank + (address & 0x1FFF)]
         else:
             return MBC.read(self, address)
 
@@ -488,7 +467,7 @@ class MBC2(MBC):
 class MBC3(MBC):
     """
     PyGirl GameBoy (TM) EmulatPyGirlBank Controller 3 (2MB ROM, 32KB RAM, Real Time Clock)
-    
+
     0000-3FFF    ROM Bank 0 (16KB)
     4000-7FFF    ROM Bank 1-127 (16KB)
     A000-BFFF    RAM Bank 0-3 (8KB)
@@ -638,7 +617,7 @@ class MBC3(MBC):
 class MBC5(MBC):
     """
     PyGirl GameBoy (TM) Emulator
-    
+
     MPyGirler 5 (8MB ROM, 128KB RAM)
      *
     0000-3FFF    ROM Bank 0 (16KB)
@@ -699,9 +678,9 @@ class HuC1(MBC1):
 class HuC3(MBC):
     """
     PyGirl GameBoy (TM) Emulator
-    
+
     Hudson Memory PyGirl2MB ROM, 128KB RAM, RTC)
-    
+
     0000-3FFF    ROM Bank 0 (16KB)
     4000-7FFF    ROM Bank 1-127 (16KB)
     A000-BFFF    RAM Bank 0-15 (8KB)

@@ -28,14 +28,11 @@ missingMemory = MissingMemory()
 
 
 class RAM(iMemory):
-    def __init__(self):
-        self.work_ram = [0] * 8192
-        self.hi_ram = [0] * 128
-        self.reset()
+    def __init__(self): self.reset()
 
     def reset(self):
-        self.work_ram = [0] * 8192
-        self.hi_ram = [0] * 128
+        self.work_ram = bytearray("\x00" * 8192)
+        self.hi_ram = bytearray("\x00" * 128)
 
     def write(self, address, data):
         # C000-DFFF Work RAM (8KB)
