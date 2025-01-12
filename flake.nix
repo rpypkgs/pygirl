@@ -47,7 +47,7 @@
         packages.default = interp;
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
-            gdb unzip
+            linuxPackages.perf gdb unzip
           ];
         };
       }

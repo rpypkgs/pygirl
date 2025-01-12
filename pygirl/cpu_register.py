@@ -1,8 +1,7 @@
 # ---------------------------------------------------------------------------
 
 class AbstractRegister(object):
-    def __init__(self):
-        self.invalid = False
+    invalid = False
 
     def get(self, use_cycles=True):
         self.check_sync()
@@ -47,11 +46,10 @@ class AbstractRegister(object):
 
 
 class Register(AbstractRegister):
+    double_register = None
+
     def __init__(self, cpu, value=0x00):
-        AbstractRegister.__init__(self)
-        # assert isinstance(cpu, CPU)
         self.reset_value = self.value = value
-        self.double_register = None
         self.cpu = cpu
         if value != 0:
             self._set(value)
@@ -85,16 +83,16 @@ class Register(AbstractRegister):
 # ------------------------------------------------------------------------------
 
 class DoubleRegister(AbstractRegister):
+    invalid = True
+    value = 0x0000
+
     def __init__(self, cpu, hi, lo, reset_value=0x0000):
-        AbstractRegister.__init__(self)
         self.cpu = cpu
-        self.invalid = True
         self.reset_value = reset_value
         self.hi = hi
         self.lo = lo
         self.hi.double_register = self
         self.lo.double_register = self
-        self.value = 0x0000
 
     def reset(self):
         self.set(self.reset_value, use_cycles=False)
@@ -154,11 +152,11 @@ class DoubleRegister(AbstractRegister):
 # ------------------------------------------------------------------------------
 
 class ReservedDoubleRegister(AbstractRegister):
+    value = 0x0000
+
     def __init__(self, cpu, reset_value=0x0000):
-        AbstractRegister.__init__(self)
         self.cpu = cpu
         self.reset_value = reset_value
-        self.value = 0x0000
 
     def reset(self):
         self.set(self.reset_value, use_cycles=False)
@@ -204,7 +202,6 @@ class ReservedDoubleRegister(AbstractRegister):
 
 class ImmediatePseudoRegister(Register):
     def __init__(self, cpu, hl):
-        # assert isinstance(cpu, CPU)
         self.cpu = cpu
         self.hl = hl
 
@@ -232,36 +229,35 @@ class FlagRegister(Register):
       4    cy    C   NC   Carry Flag
       3-0  -     -   -    Not used (always zero)
     Contains the result from the recent instruction which has affected flags.
-    
+
     The Zero Flag (Z)
-    This bit becomes set (1) if the result of an operation has been zero (0). 
+    This bit becomes set (1) if the result of an operation has been zero (0).
     Used  for conditional jumps.
-    
+
     The Carry Flag (C, or Cy)
     Becomes set when the result of an addition became bigger than FFh (8bit) or
-    FFFFh (16bit). Or when the result of a subtraction or comparision became 
-    less than zero (much as for Z80 and 80x86 CPUs, but unlike as for 65XX and 
-    ARM  CPUs). Also the flag becomes set when a rotate/shift operation has 
+    FFFFh (16bit). Or when the result of a subtraction or comparision became
+    less than zero (much as for Z80 and 80x86 CPUs, but unlike as for 65XX and
+    ARM  CPUs). Also the flag becomes set when a rotate/shift operation has
     shifted-out a "1"-bit.
-    Used for conditional jumps, and for instructions such like ADC, SBC, RL, 
+    Used for conditional jumps, and for instructions such like ADC, SBC, RL,
     RLA, etc.
-    
+
     The BCD Flags (N, H)
     These flags are (rarely) used for the DAA instruction only, N Indicates
     whether the previous instruction has been an addition or subtraction, and H
     indicates carry for lower 4bits of the result, also for DAA, the C flag must
     indicate carry for upper 8bits.
     After adding/subtracting two BCD numbers, DAA is intended to convert the
-    result into BCD format; BCD numbers are ranged from 00h to 99h rather than 
+    result into BCD format; BCD numbers are ranged from 00h to 99h rather than
     00h to FFh.
     Because C and H flags must contain carry-outs for each digit, DAA cannot be
     used for 16bit operations (which have 4 digits), or for INC/DEC operations
-    (which do not affect C-flag).    
+    (which do not affect C-flag).
     """
 
     def __init__(self, cpu, reset_value):
         Register.__init__(self, cpu)
-        # assert isinstance(cpu, CPU)
         self.reset_value = reset_value
         self.reset()
 
