@@ -546,20 +546,14 @@ class VideoDriver(object):
         size = self.width * self.height
         # any non-valid color is fine
         self.pixels = bytearray("\xff" * size)
-        self.changed = bytearray("\x00" * size)
 
     def get_pixel(self, x, y): return self.pixels[x + self.width * y]
     def set_pixel(self, x, y, p): self.pixels[x + self.width * y] = p
-    def was_dirty(self, x, y):
-        i = x + self.width * y
-        self.changed[i], rv = 0, self.changed[i]
-        return rv
 
     def draw_gb_pixel_line(self, y, colors):
         start = self.width * y
         for i in range(len(colors)):
             self.pixels[start + i] = ord(colors[i])
-            self.changed[start + i] = 1
 
     def clear_gb_pixels(self):
         # XXX deliberately wasteful in order to accomodate metadata display?
