@@ -128,12 +128,11 @@ class VideoDriverImplementation(VideoDriver):
             self.create_meta_windows(gameboy)
 
     def create_screen(self):
-        self.screen = RSDL.SetVideoMode(self.width * self.scale, self.height * self.scale, 32, 0)
+        w = self.width * self.scale
+        h = self.height * self.scale
+        self.screen = RSDL.SetVideoMode(w, h, 32, RSDL.DOUBLEBUF)
         fmt = self.screen.c_format
-        self.colors = []
-        for color in self.COLOR_MAP:
-            color = RSDL.MapRGB(fmt, *color)
-            self.colors.append(color)
+        self.colors = [RSDL.MapRGB(fmt, *color) for color in self.COLOR_MAP]
         self.blit_rect = RSDL_helper.mallocrect(0, 0, self.scale, self.scale)
 
     def create_meta_windows(self, gameboy):
@@ -161,39 +160,27 @@ class VideoDriverImplementation(VideoDriver):
             self.height = max(self.height, second_y + window.height)
 
     def update_display(self):
-        RSDL.LockSurface(self.screen)
+        while RSDL.LockSurface(self.screen): pass
+        self.draw_pixels()
         if show_metadata:
             for meta_window in self.meta_windows:
                 meta_window.draw()
-        self.draw_pixels()
         RSDL.UnlockSurface(self.screen)
         RSDL.Flip(self.screen)
-        # print '\x1b[H\x1b[2J'  # Clear screen
-        # self.draw_ascii_pixels()
-
-    def draw_pixel(self, x, y, color):
-        color = self.colors[color]
-        start_x = x * self.scale
-        start_y = y * self.scale
-        dstrect = self.blit_rect
-        rffi.setintfield(dstrect, 'c_x', start_x)
-        rffi.setintfield(dstrect, 'c_y', start_y)
-        RSDL.FillRect(self.screen, dstrect, color)
 
     def draw_pixels(self):
+        pixels = rffi.cast(rffi.UINTP, self.screen.c_pixels)
+        # NB: pitch is pre-shifted for bytes/pixel, which is always 4
+        pitch = rffi.getintfield(self.screen, "c_pitch") >> 2
         for y in range(constants.GAMEBOY_SCREEN_HEIGHT):
             for x in range(constants.GAMEBOY_SCREEN_WIDTH):
-                if self.was_dirty(x, y):
-                    self.draw_pixel(x, y, self.get_pixel(x, y))
-
-    def draw_ascii_pixels(self):
-        str = []
-        for y in range(self.height):
-            str.append("\n")
-            for x in range(self.width):
-                if y % 2 == 0 or True:
-                    str.append(["#", "%", "+", "."][self.get_pixel(x, y)])
-        print ''.join(str)
+                color = rffi.cast(rffi.UINT,
+                                  self.colors[self.get_pixel(x, y)])
+                start_x = x * self.scale
+                start_y = y * self.scale
+                for sx in range(start_x, start_x + self.scale):
+                    for sy in range(start_y, start_y + self.scale):
+                        pixels[sx + sy * pitch] = color
 
 
 # JOYPAD DRIVER ----------------------------------------------------------------
