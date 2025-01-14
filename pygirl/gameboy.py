@@ -80,11 +80,8 @@ class GameBoy(object):
 
     def get_cycles(self):
         # RPython supports only two arguments in min()
-        return min(min(min(min(self.video.get_cycles(),
-                               self.serial.get_cycles()),
-                           self.timer.get_cycles()),
-                       self.sound.get_cycles()),
-                   self.joypad.get_cycles())
+        return min(min(min(self.video.get_cycles(), self.serial.get_cycles()),
+                       self.timer.get_cycles()), self.joypad.get_cycles())
 
     def emulate(self, ticks):
         while ticks > 0:
@@ -93,7 +90,6 @@ class GameBoy(object):
             self.serial.emulate(count)
             self.timer.emulate(count)
             self.video.emulate(count)
-            self.sound.emulate(count)
             self.joypad.emulate(count)
             # self.print_cycles()
             if count == 0:
@@ -107,7 +103,6 @@ class GameBoy(object):
         self.serial.emulate(1)
         self.timer.emulate(1)
         self.video.emulate(1)
-        self.sound.emulate(1)
         self.joypad.emulate(1)
 
     def print_cycles(self):
@@ -115,7 +110,6 @@ class GameBoy(object):
         # for element in [(" video:", self.video),
         #                ("serial:", self.serial),
         #                (" timer:", self.timer), 
-        #                (" sound:", self.sound), 
         #                ("joypad:", self.joypad)]:
         #    #print "        ", element[0], element[1].get_cycles()
         #    pass

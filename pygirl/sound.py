@@ -59,6 +59,7 @@ converting between Hertz and GB frequency registers:
 
 from rpython.rtyper.lltypesystem.rffi import r_uchar
 
+from pygirl import constants
 from pygirl.constants import *
 from pygirl.ram import iMemory
 
@@ -498,7 +499,10 @@ class Sound(iMemory):
     outputLevel = 0
     output_terminal = 0
     output_enable = 0
+
     sample_rate = 44100
+    cycleSamples = [3]
+    spareCycles = 0
 
     def __init__(self):
         self.generate_frequency_table()
@@ -524,7 +528,6 @@ class Sound(iMemory):
                 self.frequency_table[period] = skip
 
     def reset(self):
-        self.cycles = int(GAMEBOY_CLOCK / SOUND_CLOCK)
         self.channel1.reset()
         self.channel2.reset()
         self.channel3.reset()
@@ -539,16 +542,6 @@ class Sound(iMemory):
             if (address & 1) == 0:
                 write = 0x00
             self.write(address, write)
-
-    def get_cycles(self):
-        return self.cycles
-
-    def emulate(self, ticks):
-        ticks = int(ticks)
-        self.cycles -= ticks
-        while self.cycles <= 0:
-            self.update_audio()
-            self.cycles += GAMEBOY_CLOCK / SOUND_CLOCK
 
     def read(self, address):
         # TODO map the read/write in groups directly to the channels
@@ -656,24 +649,49 @@ class Sound(iMemory):
         elif AUD3WAVERAM <= address <= AUD3WAVERAM + 0x3F:
             self.channel3.set_wave_pattern(address, data)
 
-    def update_audio(self):
-        if (self.output_enable & 0x80) == 0: return
-        for channel in self.channels:
-            if channel.enabled:
-                channel.update_audio()
+    def set_sample_rate(self, sample_rate):
+        self.sample_rate = sample_rate
+        # The number of samples that will be emitted per clock tick of the
+        # audio synthesizer. Since the clock is relatively slow (>1ms/cycle),
+        # we will take multiple samples before advancing the clock; since the
+        # common sample rates (44.1KHz and 48KHz) are not cleanly divided by
+        # the clock, we will compute a short train which approximates the
+        # corresponding PLL.
+        floor = sample_rate // constants.SOUND_CLOCK
+        # The train's length needs to have powers of two. Six powers is enough
+        # to compensate for the common case of 44.1KHz perfectly.
+        self.cycleSamples = [floor] * 64
+        target = float(sample_rate) / float(constants.SOUND_CLOCK)
+        total = 0
+        for i, c in enumerate(self.cycleSamples):
+            total += c
+            est = total / float(i + 1)
+            if est < target:
+                self.cycleSamples[i] += 1
+                total += 1
 
     def mix_audio(self, buffer, length):
         if (self.output_enable & 0x80) == 0: return
-        for i in range(length):
+        clock = self.spareCycles
+        trainIndex = 0
+        # XXX Stereo length is off by a factor of two between SDL and PA/PW?
+        for i in range(length >> 1):
             left = right = 0
+            clock -= 1
+            doCycle = clock <= 0
+            if doCycle:
+                clock += self.cycleSamples[trainIndex]
+                trainIndex += 1
+                if trainIndex >= len(self.cycleSamples): trainIndex = 0
             for channel in self.channels:
+                if doCycle: channel.update_audio()
                 if channel.enabled:
                     l, r = channel.next_samples(self.output_terminal)
                     left += l
                     right += r
             buffer[i << 1] = r_uchar(left)
             buffer[(i << 1) | 1] = r_uchar(right)
-            # Output Control
+        self.spareCycles = clock
 
     def get_output_level(self):
         return self.outputLevel

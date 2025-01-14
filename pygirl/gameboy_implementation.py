@@ -74,7 +74,7 @@ class GameBoyImplementation(GameBoy):
                 assignAudioCallback(desired, writeSound)
                 RSDL.OpenAudio(desired, audioSpec)
                 self.sound_driver.create_sound_driver(audioSpec)
-                self.sound.sample_rate = self.sound_driver.sampleRate
+        self.sound.set_sample_rate(self.sound_driver.sampleRate)
 
     def create_drivers(self):
         self.clock = Clock()
@@ -271,7 +271,7 @@ def getSound(): return _SD[0]
 def writeSound(_, buffer, length):
     mixer = getSound()
     assert mixer, "rutabaga"
-    mixer.mix_audio(rffi.cast(rffi.UCHARP, buffer), intmask(length))
+    getSound().mix_audio(rffi.cast(rffi.UCHARP, buffer), intmask(length))
 
 # ==============================================================================
 
