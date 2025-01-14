@@ -1,8 +1,7 @@
-# PyGirlGameboy
-PyGirl - GameBoy emulator written in RPython.
+# PyGirl
 
-Also runs on CPython, PyPy (good for debug).
-Sound isn't completely implemented.
-All graphics are done using SDL via `rsdl` package.
-
-Original repo: https://bitbucket.org/pypy/lang-gameboy/
+This repository is a living implementation of the virtual machine first
+sketched in [Bruni & Verwaest
+2009](https://scg.unibe.ch/archive/papers/Brun09cPyGirl.pdf), "PyGirl:
+Generating Whole-System VMs from High-Level Prototypes using PyPy". It
+features video and audio output, as well as keyboard/joypad input, via SDL.
