@@ -3,7 +3,7 @@
 from pygirl.gameboy import GameBoy
 from pygirl.joypad import JoypadDriver
 from pygirl.video import VideoDriver
-from pygirl.sound import SoundDriver
+from pygirl.sound import Sound, SoundDriver
 from pygirl.timer import Clock
 from pygirl.video_meta import TileDataWindow, SpriteWindow, \
     WindowPreview, BackgroundPreview, \
@@ -16,10 +16,13 @@ import time
 # WARNING! Window will be very, very big!
 show_metadata = False
 
+from rpython.rlib.jit import jit_callback
 from rpython.rlib.rarithmetic import intmask, r_int, r_uint
 from rpython.rtyper.lltypesystem import lltype, rffi
+from rpython.translator.tool.cbuild import ExternalCompilationInfo
 
 from rsdl import RSDL, RSDL_helper
+from rsdl.eci import get_rsdl_compilation_info
 
 
 def delay(secs): return RSDL.Delay(int(secs * 1000))
@@ -28,6 +31,21 @@ def delay(secs): return RSDL.Delay(int(secs * 1000))
 # About 64 to make sure we have a clean distrubution of about
 # 64 frames per second
 FPS = 64
+
+# RSDL hacks
+
+assignAudioCallbackSig = """
+RPY_EXTERN void assignAudioCallback(SDL_AudioSpec *spec, void (SDLCALL *callback)(void *userdata, Uint8 *stream, int len))
+""".strip()
+
+eci = get_rsdl_compilation_info().merge(ExternalCompilationInfo(
+    post_include_bits=[assignAudioCallbackSig + ";"],
+    separate_module_sources=["%s { spec->callback = callback; }" % assignAudioCallbackSig],
+))
+
+assignAudioCallback = rffi.llexternal("assignAudioCallback",
+                                      [RSDL.AudioSpecPtr, RSDL.AudioCallback],
+                                      lltype.Void, compilation_info=eci)
 
 
 # GAMEBOY ----------------------------------------------------------------------
@@ -38,6 +56,7 @@ class GameBoyImplementation(GameBoy):
         self.is_running = False
         self.penalty = 0
         self.sync_time = int(time.time())
+        setSoundMixer(self.sound)
 
     def open_window(self):
         self.init_sdl()
@@ -46,21 +65,21 @@ class GameBoyImplementation(GameBoy):
     def init_sdl(self):
         assert RSDL.Init(RSDL.INIT_VIDEO) >= 0
         self.event = lltype.malloc(RSDL.Event, flavor='raw')
-
-    def create_drivers(self):
-        self.clock = Clock()
-        self.joypad_driver = JoypadDriverImplementation()
-        self.video_driver = VideoDriverImplementation(self)
-        self.sound_driver = SoundDriverImplementation()
         with lltype.scoped_alloc(RSDL.AudioSpec, zero=True) as desired:
             with lltype.scoped_alloc(RSDL.AudioSpec, zero=True) as audioSpec:
                 rffi.setintfield(desired, "c_freq", 44100)
                 rffi.setintfield(desired, "c_format", RSDL.AUDIO_U8)
                 rffi.setintfield(desired, "c_channels", 2)
                 rffi.setintfield(desired, "c_samples", 512)
-                # desired.c_callback = self.sound_driver.write
+                assignAudioCallback(desired, writeSound)
                 RSDL.OpenAudio(desired, audioSpec)
                 self.sound_driver.create_sound_driver(audioSpec)
+
+    def create_drivers(self):
+        self.clock = Clock()
+        self.joypad_driver = JoypadDriverImplementation()
+        self.video_driver = VideoDriverImplementation(self)
+        self.sound_driver = SoundDriverImplementation()
 
     def mainLoop(self):
         self.reset()
@@ -236,36 +255,32 @@ class JoypadDriverImplementation(JoypadDriver):
 # SOUND DRIVER -----------------------------------------------------------------
 
 class SoundDriverImplementation(SoundDriver):
-    """
-    The current implementation doesnt handle sound yet
-    """
-
-    enabled = False
-
     def create_sound_driver(self, audioSpec):
         self.sampleRate = intmask(audioSpec.c_freq)
         self.channelCount = intmask(audioSpec.c_channels)
-        self.buffersize = intmask(audioSpec.c_samples)
-
-        self.bitsPerSample = 4
-        self.sampleSize = self.bitsPerSample * self.channelCount
 
     def start(self): RSDL.PauseAudio(0)
-
     def stop(self): RSDL.PauseAudio(1)
 
-    def write(self, buffer, length):
-        if not self.enabled: return
-        pass
+# Hack access to the sound driver inside SDL audio callbacks.
+_SD = [Sound(44100)]
+def setSoundMixer(sd): _SD[0] = sd
+def getSoundMixer(): return _SD[0]
 
+@jit_callback("writeSound")
+def writeSound(_, buffer, length):
+    getSoundMixer().mix_audio(rffi.cast(rffi.UCHARP, buffer), intmask(length))
 
 # ==============================================================================
 
-if __name__ == '__main__':
-    import sys
-
+def main(argv):
     gameboy = GameBoyImplementation()
-    rom = sys.argv[1]
-    print rom
+    rom = argv[1]
+    print "ROM:", rom
     gameboy.load_cartridge_file(rom)
     gameboy.mainLoop()
+    return 0
+
+if __name__ == '__main__':
+    import sys
+    sys.exit(main(sys.argv))

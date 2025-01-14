@@ -1,6 +1,6 @@
 """
 PyGirl Emulator
- 
+
 Audio Processor Unit (Sharp LR35902 APU)
 
 There are two sound channels connected to the output
@@ -55,29 +55,26 @@ converting between Hertz and GB frequency registers:
     gb = 2048 - (131072 / Hz)
 
     Hz  = 131072 / (2048 - gb)
-    
+
 """
+
+from rpython.rtyper.lltypesystem.rffi import r_uchar
 
 from pygirl.constants import *
 from pygirl.ram import iMemory
 
 
 class Channel(object):
+    envelope = 0
+    frequency = 0
     index = 0
     length = 0
-    frequency = 0
+    playback = 0
+    enabled = False
 
     def __init__(self, sample_rate, frequency_table):
         self.sample_rate = int(sample_rate)
         self.frequency_table = frequency_table
-        self.length = 0
-        self.envelope = 0
-        self.frequency = 0
-        self.playback = 0
-        self.index = 0
-        self.length = 0
-        self.frequency = 0
-        self.enabled = False
 
     def reset(self):
         self.index = 0
@@ -116,36 +113,29 @@ class Channel(object):
     def set_playback(self, playback):
         self.playback = playback
 
-    def mix_audio(self, buffer, length, output_terminal):
-        pass
-
 
 # ------------------------------------------------------------------------------
 
 # SquareWaveGenerator
 class SquareWaveChannel(Channel):
-    # Audio Channel 1 int
-    def __init__(self, sample_rate, frequency_table):
-        Channel.__init__(self, sample_rate, frequency_table)
-        self.sample_sweep = 0
-        self.raw_sample_sweep = 0
-        self.index = 0
-        self.length = 0
-        self.raw_length = 0
-        self.volume = 0
-        self.envelope_length = 0
-        self.sample_sweep_length = 0
-        self.frequency = 0
-        self.raw_frequency = 0
+    sample_sweep = 0
+    raw_sample_sweep = 0
+    index = 0
+    length = 0
+    raw_length = 0
+    volume = 0
+    envelope_length = 0
+    sample_sweep_length = 0
+    frequency = 0
+    raw_frequency = 0
 
+    # Audio Channel 1 int
     def reset(self):
         Channel.reset(self)
         self.set_sweep(0x80)
         self.set_length(0x3F)
         self.set_envelope(0x00)
         self.set_frequency(0xFF)
-
-
         # Audio Channel 1
 
     def get_sweep(self):
@@ -238,21 +228,14 @@ class SquareWaveChannel(Channel):
             self.enabled = False
             # self.output_enable &= ~0x01
 
-    def mix_audio(self, buffer, length, output_terminal):
-        wave_pattern = self.get_current_wave_pattern()
-        for index in range(0, length, 3):
-            self.index += self.frequency
-            # if (self.index & (0x1F << 22)) >= wave_pattern:
-            # output_terminal & 0x20 for the second SquareWaveChannel
-            if (output_terminal & 0x10) != 0:
-                buffer[index + 0] -= self.volume
-            if (output_terminal & 0x01) != 0:
-                buffer[index + 1] -= self.volume
-                # else:
-                #    if (output_terminal & 0x10) != 0:
-                #        buffer[index + 0] += self.volume
-                #    if (output_terminal & 0x01) != 0:
-                #        buffer[index + 1] += self.volume
+    def next_samples(self, output_terminal):
+        self.index += self.frequency
+        # wave_pattern = self.get_current_wave_pattern()
+        # if (self.index & (0x1F << 22)) >= wave_pattern:
+        # output_terminal & 0x20 for the second SquareWaveChannel
+        l = self.volume if output_terminal & 0x10 else 0
+        r = self.volume if output_terminal & 0x01 else 0
+        return l, r
 
     def get_current_wave_pattern(self):
         wave_pattern = 0x18
@@ -268,15 +251,16 @@ class SquareWaveChannel(Channel):
 # ---------------------------------------------------------------------------
 
 class VoluntaryWaveChannel(Channel):
+    enable = 0
+    level = 0
+    index = 0
+    length = 0
+    raw_length = 0
+    frequency = 0
+    raw_frequency = 0
+
     def __init__(self, sample_rate, frequency_table):
         Channel.__init__(self, sample_rate, frequency_table)
-        self.enable = 0
-        self.level = 0
-        self.index = 0
-        self.length = 0
-        self.raw_length = 0
-        self.frequency = 0
-        self.raw_frequency = 0
         self.wave_pattern = [0] * 16
 
     def reset(self):
@@ -337,20 +321,18 @@ class VoluntaryWaveChannel(Channel):
             self.enabled = self.length <= 0
             # self.output_enable &= ~0x04
 
-    def mix_audio(self, buffer, length, output_terminal):
-        wave_pattern = self.get_current_wave_pattern()
-        for index in range(0, length, 2):
-            self.index += self.frequency
-            sample = self.wave_pattern[(self.index >> 23) & 0x0F]
-            if (self.index & (1 << 22)) != 0:
-                sample = (sample >> 0) & 0x0F
-            else:
-                sample = (sample >> 4) & 0x0F
-            sample = int(((sample - 8) << 1) >> self.level)
-            if (output_terminal & 0x40) != 0:
-                buffer[index + 0] += sample
-            if (output_terminal & 0x04) != 0:
-                buffer[index + 1] += sample
+    def next_samples(self, output_terminal):
+        # wave_pattern = self.get_current_wave_pattern()
+        self.index += self.frequency
+        sample = self.wave_pattern[(self.index >> 23) & 0x0F]
+        if (self.index & (1 << 22)) != 0:
+            sample = (sample >> 0) & 0x0F
+        else:
+            sample = (sample >> 4) & 0x0F
+        sample = int(((sample - 8) << 1) >> self.level)
+        l = sample if output_terminal & 0x40 else 0
+        r = sample if output_terminal & 0x04 else 0
+        return l, r
 
     def get_current_wave_pattern(self):
         wave_pattern = 2
@@ -366,17 +348,18 @@ class VoluntaryWaveChannel(Channel):
 # --------------------------------------------------------------------------- 
 
 class NoiseGenerator(Channel):
+    length = 0
+    polynomial = 0
+    index = 0
+    length = 0
+    raw_length = 0
+    volume = 0
+    envelope_length = 0
+    frequency = 0
+
     def __init__(self, sample_rate, frequency_table):
         Channel.__init__(self, sample_rate, frequency_table)
         # Audio Channel 4 int
-        self.length = 0
-        self.polynomial = 0
-        self.index = 0
-        self.length = 0
-        self.raw_length = 0
-        self.volume = 0
-        self.envelope_length = 0
-        self.frequency = 0
         self.generate_noise_frequency_ratio_table()
         self.generate_noise_tables()
 
@@ -491,48 +474,36 @@ class NoiseGenerator(Channel):
             self.volume -= 1
         self.envelope_length += (SOUND_CLOCK / 64) * (self.envelope & 0x07)
 
-    def mix_audio(self, buffer, length, output_terminal):
-        for index in range(0, length, 2):
-            self.index += self.frequency
-            # polynomial
-            if (self.polynomial & 0x08) != 0:
-                #  7 steps
-                self.index &= 0x7FFFFF
-                polynomial = self.noise_step_7_table[self.index >> 21] >> \
-                             ((self.index >> 16) & 0x1F)
-            else:
-                #  15 steps
-                self.index &= 0x7FFFFFFF
-                polynomial = self.noise_step_15_table[self.index >> 21] >> \
-                             ((self.index >> 16) & 0x1F)
-            if (polynomial & 1) != 0:
-                if (output_terminal & 0x80) != 0:
-                    buffer[index + 0] -= self.volume
-                if (output_terminal & 0x08) != 0:
-                    buffer[index + 1] -= self.volume
-            else:
-                if (output_terminal & 0x80) != 0:
-                    buffer[index + 0] += self.volume
-                if (output_terminal & 0x08) != 0:
-                    buffer[index + 1] += self.volume
+    def next_samples(self, output_terminal):
+        self.index += self.frequency
+        # polynomial
+        if (self.polynomial & 0x08) != 0:
+            #  7 steps
+            self.index &= 0x7FFFFF
+            polynomial = self.noise_step_7_table[self.index >> 21] >> \
+                         ((self.index >> 16) & 0x1F)
+        else:
+            #  15 steps
+            self.index &= 0x7FFFFFFF
+            polynomial = self.noise_step_15_table[self.index >> 21] >> \
+                         ((self.index >> 16) & 0x1F)
+        l = self.volume if output_terminal & 0x80 else 0
+        r = self.volume if output_terminal & 0x08 else 0
+        return (-l, -r) if polynomial & 1 else (l, r)
 
 
 # ------------------------------------------------------------------------------
 
 
 class Sound(iMemory):
-    def __init__(self, sound_driver):
-        self.buffer = [0] * 512
-        self.outputLevel = 0
-        self.output_terminal = 0
-        self.output_enable = 0
+    outputLevel = 0
+    output_terminal = 0
+    output_enable = 0
 
-        self.driver = sound_driver
-        self.sample_rate = self.driver.get_sample_rate()
-
+    def __init__(self, sample_rate):
+        self.sample_rate = sample_rate
         self.generate_frequency_table()
         self.create_channels()
-
         self.reset()
 
     def create_channels(self):
@@ -555,7 +526,6 @@ class Sound(iMemory):
 
     def reset(self):
         self.cycles = int(GAMEBOY_CLOCK / SOUND_CLOCK)
-        self.frames = 0
         self.channel1.reset()
         self.channel2.reset()
         self.channel3.reset()
@@ -571,12 +541,6 @@ class Sound(iMemory):
                 write = 0x00
             self.write(address, write)
 
-    def start(self):
-        self.driver.start()
-
-    def stop(self):
-        self.driver.stop()
-
     def get_cycles(self):
         return self.cycles
 
@@ -585,16 +549,7 @@ class Sound(iMemory):
         self.cycles -= ticks
         while self.cycles <= 0:
             self.update_audio()
-            if self.driver.is_enabled():
-                self.mix_down_audio()
             self.cycles += GAMEBOY_CLOCK / SOUND_CLOCK
-
-    def mix_down_audio(self):
-        self.frames += self.driver.get_sample_rate()
-        length = (self.frames / SOUND_CLOCK) << 1
-        self.mix_audio(self.buffer, length)
-        self.driver.write(self.buffer, length)
-        self.frames %= SOUND_CLOCK
 
     def read(self, address):
         # TODO map the read/write in groups directly to the channels
@@ -709,12 +664,17 @@ class Sound(iMemory):
                     channel.update_audio()
 
     def mix_audio(self, buffer, length):
-        if self.output_enable & 0x80 != 0:
+        if (self.output_enable & 0x80) == 0: return
+        for i in range(length):
+            left = right = 0
             for channel in self.channels:
                 if channel.enabled:
-                    channel.mix_audio(buffer, length, self.output_terminal)
-
-                    # Output Control
+                    l, r = channel.next_samples(self.output_terminal)
+                    left += l
+                    right += r
+            buffer[i << 1] = r_uchar(left)
+            buffer[(i << 1) | 1] = r_uchar(right)
+            # Output Control
 
     def get_output_level(self):
         return self.outputLevel
@@ -738,58 +698,16 @@ class Sound(iMemory):
             self.output_enable &= 0xF0
 
 
-class BogusSound(iMemory):
-    """
-        Used for development purposes
-    """
-
-    def __init__(self):
-        pass
-
-    def get_cycles(self):
-        return
-
-    def reset(self):
-        pass
-
-    def get_cycles(self):
-        return 0xFF
-
-    def emulate(self, ticks):
-        pass
-
-    def write(self, address, data): pass
-
-    def read(self, address): return 0xff
-
-
 # SOUND DRIVER -----------------------------------------------------------------
 
 
 class SoundDriver(object):
-    def __init__(self):
-        self.enabled = True
-        self.sample_rate = 44100
-        self.channel_count = 2
-        self.bits_per_sample = 8
-
-    def is_enabled(self):
-        return self.enabled
-
-    def get_sample_rate(self):
-        return self.sample_rate
-
-    def get_channels(self):
-        return self.channel_count
-
-    def get_bits_per_sample(self):
-        return self.bits_per_sample
+    enabled = True
+    sampleRate = 44100
+    channelCount = 2
 
     def start(self):
         pass
 
     def stop(self):
-        pass
-
-    def write(self, buffer, length):
         pass

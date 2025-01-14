@@ -11,7 +11,7 @@ from pygirl.cartridge import CartridgeManager
 from pygirl.joypad import Joypad, JoypadDriver
 from pygirl.ram import missingMemory, RAM
 from pygirl.serial import Serial
-from pygirl.sound import Sound, SoundDriver, BogusSound
+from pygirl.sound import Sound, SoundDriver
 from pygirl.timer import Timer, Clock
 from pygirl.video import Video, VideoDriver
 from pygirl.cartridge import CartridgeManager, CartridgeFile
@@ -37,8 +37,7 @@ class GameBoy(object):
         self.timer = Timer(self.interrupt)
         self.joypad = Joypad(self.joypad_driver, self.interrupt)
         self.video = Video(self.video_driver, self.interrupt, self)
-        # self.sound    = Sound(self.sound_driver)
-        self.sound = BogusSound()
+        self.sound = Sound(self.sound_driver.sampleRate)
 
     def get_cartridge_manager(self):
         return self.cartridge_manager
@@ -61,10 +60,10 @@ class GameBoy(object):
         self.cartridge_manager.save(cartridgeName)
 
     def start(self):
-        self.sound.start()
+        self.sound_driver.start()
 
     def stop(self):
-        self.sound.stop()
+        self.sound_driver.stop()
 
     def reset(self):
         self.ram.reset()
