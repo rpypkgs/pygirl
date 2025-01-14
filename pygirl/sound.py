@@ -657,14 +657,14 @@ class Sound(iMemory):
             self.channel3.set_wave_pattern(address, data)
 
     def update_audio(self):
-        if (self.output_enable & 0x80) != 0:
-            for channel in self.channels:
-                if channel.enabled:
-                    channel.update_audio()
+        if (self.output_enable & 0x80) == 0: return
+        for channel in self.channels:
+            if channel.enabled:
+                channel.update_audio()
 
     def mix_audio(self, buffer, length):
         if (self.output_enable & 0x80) == 0: return
-        for i in range(length >> 1):
+        for i in range(length):
             left = right = 0
             for channel in self.channels:
                 if channel.enabled:
