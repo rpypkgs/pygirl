@@ -59,9 +59,16 @@ converting between Hertz and GB frequency registers:
 
 from rpython.rtyper.lltypesystem.rffi import r_uchar
 
+from rsdl import RSDL
+
 from pygirl import constants
 from pygirl.constants import *
 from pygirl.ram import iMemory
+
+
+class theAudioLock(object):
+    def __enter__(self): RSDL.LockAudio()
+    def __exit__(self, *args): RSDL.UnlockAudio()
 
 
 class Channel(object):
@@ -544,110 +551,112 @@ class Sound(iMemory):
             self.write(address, write)
 
     def read(self, address):
-        # TODO map the read/write in groups directly to the channels
-        address = int(address)
-        if address == NR10:
-            return self.channel1.get_sweep()
-        elif address == NR11:
-            return self.channel1.get_length()
-        elif address == NR12:
-            return self.channel1.get_envelope()
-        elif address == NR13:
-            return self.channel1.get_frequency()
-        elif address == NR14:
-            return self.channel1.get_playback()
+        with theAudioLock():
+            # TODO map the read/write in groups directly to the channels
+            address = int(address)
+            if address == NR10:
+                return self.channel1.get_sweep()
+            elif address == NR11:
+                return self.channel1.get_length()
+            elif address == NR12:
+                return self.channel1.get_envelope()
+            elif address == NR13:
+                return self.channel1.get_frequency()
+            elif address == NR14:
+                return self.channel1.get_playback()
 
-        elif address == NR21:
-            return self.channel2.get_length()
-        elif address == NR22:
-            return self.channel2.get_envelope()
-        elif address == NR23:
-            return self.channel2.get_frequency()
-        elif address == NR24:
-            return self.channel2.get_playback()
+            elif address == NR21:
+                return self.channel2.get_length()
+            elif address == NR22:
+                return self.channel2.get_envelope()
+            elif address == NR23:
+                return self.channel2.get_frequency()
+            elif address == NR24:
+                return self.channel2.get_playback()
 
-        elif address == NR30:
-            return self.channel3.get_enable()
-        elif address == NR31:
-            return self.channel3.get_length()
-        elif address == NR32:
-            return self.channel3.get_level()
-        elif address == NR33:
-            return self.channel4.get_frequency()
-        elif address == NR34:
-            return self.channel3.get_playback()
+            elif address == NR30:
+                return self.channel3.get_enable()
+            elif address == NR31:
+                return self.channel3.get_length()
+            elif address == NR32:
+                return self.channel3.get_level()
+            elif address == NR33:
+                return self.channel4.get_frequency()
+            elif address == NR34:
+                return self.channel3.get_playback()
 
-        elif address == NR41:
-            return self.channel4.get_length()
-        elif address == NR42:
-            return self.channel4.get_envelope()
-        elif address == NR43:
-            return self.channel4.get_polynomial()
-        elif address == NR44:
-            return self.channel4.get_playback()
+            elif address == NR41:
+                return self.channel4.get_length()
+            elif address == NR42:
+                return self.channel4.get_envelope()
+            elif address == NR43:
+                return self.channel4.get_polynomial()
+            elif address == NR44:
+                return self.channel4.get_playback()
 
-        elif address == NR50:
-            return self.get_output_level()
-        elif address == NR51:
-            return self.get_output_terminal()
-        elif address == NR52:
-            return self.get_output_enable()
+            elif address == NR50:
+                return self.get_output_level()
+            elif address == NR51:
+                return self.get_output_terminal()
+            elif address == NR52:
+                return self.get_output_enable()
 
-        elif AUD3WAVERAM <= address <= AUD3WAVERAM + 0x3F:
-            return self.channel3.get_wave_pattern(address)
-        return 0xFF
+            elif AUD3WAVERAM <= address <= AUD3WAVERAM + 0x3F:
+                return self.channel3.get_wave_pattern(address)
+            return 0xFF
 
     def write(self, address, data):
-        address = int(address)
-        if address == NR10:
-            self.channel1.set_sweep(data)
-        elif address == NR11:
-            self.channel1.set_length(data)
-        elif address == NR12:
-            self.channel1.set_envelope(data)
-        elif address == NR13:
-            self.channel1.set_frequency(data)
-        elif address == NR14:
-            self.channel1.set_playback(data)
+        with theAudioLock():
+            address = int(address)
+            if address == NR10:
+                self.channel1.set_sweep(data)
+            elif address == NR11:
+                self.channel1.set_length(data)
+            elif address == NR12:
+                self.channel1.set_envelope(data)
+            elif address == NR13:
+                self.channel1.set_frequency(data)
+            elif address == NR14:
+                self.channel1.set_playback(data)
 
-        elif address == NR21:
-            self.channel2.set_length(data)
-        elif address == NR22:
-            self.channel2.set_envelope(data)
-        elif address == NR23:
-            self.channel2.set_frequency(data)
-        elif address == NR24:
-            self.channel2.set_playback(data)
+            elif address == NR21:
+                self.channel2.set_length(data)
+            elif address == NR22:
+                self.channel2.set_envelope(data)
+            elif address == NR23:
+                self.channel2.set_frequency(data)
+            elif address == NR24:
+                self.channel2.set_playback(data)
 
-        elif address == NR30:
-            self.channel3.set_enable(data)
-        elif address == NR31:
-            self.channel3.set_length(data)
-        elif address == NR32:
-            self.channel3.set_level(data)
-        elif address == NR33:
-            self.channel3.set_frequency(data)
-        elif address == NR34:
-            self.channel3.set_playback(data)
+            elif address == NR30:
+                self.channel3.set_enable(data)
+            elif address == NR31:
+                self.channel3.set_length(data)
+            elif address == NR32:
+                self.channel3.set_level(data)
+            elif address == NR33:
+                self.channel3.set_frequency(data)
+            elif address == NR34:
+                self.channel3.set_playback(data)
 
-        elif address == NR41:
-            self.channel4.set_length(data)
-        elif address == NR42:
-            self.channel4.set_envelope(data)
-        elif address == NR43:
-            self.channel4.set_polynomial(data)
-        elif address == NR44:
-            self.channel4.set_playback(data)
+            elif address == NR41:
+                self.channel4.set_length(data)
+            elif address == NR42:
+                self.channel4.set_envelope(data)
+            elif address == NR43:
+                self.channel4.set_polynomial(data)
+            elif address == NR44:
+                self.channel4.set_playback(data)
 
-        elif address == NR50:
-            self.set_output_level(data)
-        elif address == NR51:
-            self.set_output_terminal(data)
-        elif address == NR52:
-            self.set_output_enable(data)
+            elif address == NR50:
+                self.set_output_level(data)
+            elif address == NR51:
+                self.set_output_terminal(data)
+            elif address == NR52:
+                self.set_output_enable(data)
 
-        elif AUD3WAVERAM <= address <= AUD3WAVERAM + 0x3F:
-            self.channel3.set_wave_pattern(address, data)
+            elif AUD3WAVERAM <= address <= AUD3WAVERAM + 0x3F:
+                self.channel3.set_wave_pattern(address, data)
 
     def set_sample_rate(self, sample_rate):
         self.sample_rate = sample_rate
