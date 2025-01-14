@@ -55,7 +55,6 @@ converting between Hertz and GB frequency registers:
     gb = 2048 - (131072 / Hz)
 
     Hz  = 131072 / (2048 - gb)
-
 """
 
 from rpython.rtyper.lltypesystem.rffi import r_uchar
@@ -183,13 +182,13 @@ class SquareWaveChannel(Channel):
             self.volume = self.envelope >> 4
             self.envelope_length = (SOUND_CLOCK / 64) * (self.envelope & 0x07)
 
-    def update_enable(self):
+    def update_enabled(self):
         if (self.playback & 0x40) != 0 and self.length > 0:
             self.length -= 1
             if self.length <= 0:
                 self.enabled = False
 
-    def update_volume_and_envelope(self):
+    def update_envelope_and_volume(self):
         if self.envelope_length <= 0: return
         self.envelope_length -= 1
         if self.envelope_length <= 0:
@@ -499,9 +498,9 @@ class Sound(iMemory):
     outputLevel = 0
     output_terminal = 0
     output_enable = 0
+    sample_rate = 44100
 
-    def __init__(self, sample_rate):
-        self.sample_rate = sample_rate
+    def __init__(self):
         self.generate_frequency_table()
         self.create_channels()
         self.reset()
@@ -665,7 +664,7 @@ class Sound(iMemory):
 
     def mix_audio(self, buffer, length):
         if (self.output_enable & 0x80) == 0: return
-        for i in range(length):
+        for i in range(length >> 1):
             left = right = 0
             for channel in self.channels:
                 if channel.enabled:

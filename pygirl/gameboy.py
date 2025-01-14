@@ -37,7 +37,7 @@ class GameBoy(object):
         self.timer = Timer(self.interrupt)
         self.joypad = Joypad(self.joypad_driver, self.interrupt)
         self.video = Video(self.video_driver, self.interrupt, self)
-        self.sound = Sound(self.sound_driver.sampleRate)
+        self.sound = Sound()
 
     def get_cartridge_manager(self):
         return self.cartridge_manager

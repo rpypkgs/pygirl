@@ -1,15 +1,21 @@
 #!/usr/bin/env python
-import sys
-    
+import os, sys
+
+import py
+
+from rpython.rlib import rgil
+
 from pygirl.cartridge import CartridgeHeaderCorruptedException, CartridgeTruncatedException
 
-import os, py, pdb
 from gameboy_implementation import GameBoyImplementation
 
 ROM_PATH = str(py.path.local(__file__).dirpath() / "rom")
 
 # Main entry point!
-def entry_point(argv=None):
+def entry_point(argv):
+    # Prepare for threading.
+    rgil.allocate()
+
     if argv and len(argv) > 1:
         filename = argv[1]
     else:
@@ -28,6 +34,7 @@ def entry_point(argv=None):
         return 1
 
     gameBoy.open_window()
+    gameBoy.start()
     gameBoy.mainLoop()
 
     return 0

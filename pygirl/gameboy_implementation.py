@@ -56,7 +56,7 @@ class GameBoyImplementation(GameBoy):
         self.is_running = False
         self.penalty = 0
         self.sync_time = int(time.time())
-        setSoundMixer(self.sound)
+        self.sound = getSound()
 
     def open_window(self):
         self.init_sdl()
@@ -74,6 +74,7 @@ class GameBoyImplementation(GameBoy):
                 assignAudioCallback(desired, writeSound)
                 RSDL.OpenAudio(desired, audioSpec)
                 self.sound_driver.create_sound_driver(audioSpec)
+                self.sound.sample_rate = self.sound_driver.sampleRate
 
     def create_drivers(self):
         self.clock = Clock()
@@ -263,13 +264,14 @@ class SoundDriverImplementation(SoundDriver):
     def stop(self): RSDL.PauseAudio(1)
 
 # Hack access to the sound driver inside SDL audio callbacks.
-_SD = [Sound(44100)]
-def setSoundMixer(sd): _SD[0] = sd
-def getSoundMixer(): return _SD[0]
+_SD = [Sound()]
+def getSound(): return _SD[0]
 
 @jit_callback("writeSound")
 def writeSound(_, buffer, length):
-    getSoundMixer().mix_audio(rffi.cast(rffi.UCHARP, buffer), intmask(length))
+    mixer = getSound()
+    assert mixer, "rutabaga"
+    mixer.mix_audio(rffi.cast(rffi.UCHARP, buffer), intmask(length))
 
 # ==============================================================================
 
